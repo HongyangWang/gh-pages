@@ -1,0 +1,93 @@
+---
+title: "Practical ML - PA - Activity Quality Prediction with Random Forest"
+author: "Wang, Hongyang"
+date: "Sunday, September 21, 2014"
+output: html_document
+---
+
+***
+
+## Introduction
+In this project, the goal is to use [Weight Lifting Exercise Dataset](http://groupware.les.inf.puc-rio.br/har) to predict how well an activity is performed. The data come from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, who were asked to perform barbell lifts correctly and incorrectly in 5 different ways.  
+
+The report will first built a model. Then, preprocess the data and train the model. Next, estimate the error with cross-validation. Finally, give predictions on the test set.
+
+***
+
+## Choosing a Model
+Among the many machine learning models for prediction, this report chose **Random Forest** based on following considerations:  
+
+- Random forests has quite high accuracy.  
+- It can be easily implemented in R using the `randomForest` package.
+- Although it may be hard to interpret, we don't really care about how it makes the classification; we mainly focus on what it will predict given new observations.
+
+***
+
+## Data Preprocessing
+First, load the training data into R as `train` and have a brief look at it.
+```{r load data, results = "hide"}
+train <- read.csv("pml-training.csv")
+head(train); str(train)
+```  
+
+Next we will choose variables as predictors. As we have a closer look, we can find that there are many columns having blank or missing values. Besides, there are also some variables that are unrelated to the prediction, such as `user_name`, `cvtd_timestamp`, etc. It's reasonable these two kinds of variables should be removed from the training set. In this report, I manually pick up variables that will be used as predictors.
+```{r choosing predictors}
+idx <- c(8:11, 37:49, 60:68, 84:86, 102, 113:124, 140, 151:159, 160)
+training <- train[ , idx]
+```  
+
+Finally we get a training set with 53 variables including the `classe` variable.
+
+***
+
+## Training and Cross Validation
+In this report, I build up the cross-validation set using **random subsampling**. Concretely, by randomly sampling indices I split the `training` set into two parts: 70% for training set (named `tr`), 30% for cross-validation set (named `cv`), considering both the training accuracy and the running time. `tr` will be used for fitting and training the random forests model, and `cv` will be used for evaluating and improving the model as well as estimating the out of sample error. 
+
+To make the estimation more accurate, I repeat the procedure above for 5 times and compute the average accuracy on the 5 different `cv` sets.
+```{r train}
+n = nrow(train)
+library(caret); library(randomForest)
+accuracy <- c(rep(0, 5))  ## do cv test 5 times
+for(i in 1:5) {
+    idxTR <- sample(1:n, round(0.7 * n))
+    idxCV <- !(1:n %in% idxTR)
+    tr <- training[idxTR, ]
+    cv <- training[idxCV, ]
+    gt <- as.character(cv$classe)  ## groundtruth predictions for cv
+    
+    modFit <- randomForest(classe ~ ., data = tr)
+    #print(modFit)
+    pred <- as.character(predict(modFit, newdata = cv))
+    ac <- sum(pred == gt) / nrow(cv)
+    
+    accuracy[i] = ac  ## record the accuracy on cv each time
+}
+```  
+
+We can print one of the training results giving by function `randomForest()`. It shows a really high accuracy on the training set, which means that the model has really low bias.  
+```{r result}
+print(modFit)
+```  
+
+The average accuracy on the cross-validation sets can be computed:
+```{r accuracy}
+library(scales)
+percent(mean(accuracy))  ## give the estimated accuracy of the model
+```  
+
+So the estimated out of sample error is `r percent(1 - mean(accuracy))`. As we can see, the error is quite small, which means the model does not overfit to the `tr` set and can give accurate predictions with new data.
+
+***
+
+## Prediction on the Test Set
+After finishing training the model, we use it to predict the test data.
+```{r test}
+test <- read.csv("pml-testing.csv")
+predTest <- as.character(predict(modFit, newdata = test))
+print(predTest)
+```  
+
+I organized the result into txt format and submitted to the online judger and got full marks, which proves the validity and accuracy of the random forests model on this problem.
+
+***
+*This is the end of this report.*
